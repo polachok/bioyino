@@ -51,7 +51,7 @@ where
         .skip(byte(b'|'))
         .and_then(|value| {
             from_utf8(value)
-                .map_err(|e| ParseError::Utf8(e))
+                .map_err(ParseError::Utf8)
                 .compat()?
                 .parse::<F>()
                 .map_err(|_| {
@@ -76,7 +76,7 @@ where
 
     let sampling = (bytes(b"|@"), take_while(|c: u8| c != b'\n')).and_then(|(_, value)| {
         from_utf8(value)
-            .map_err(|e| ParseError::Utf8(e))
+            .map_err(ParseError::Utf8)
             .compat()?
             .parse::<f32>()
             .map_err(|_| {
@@ -87,7 +87,7 @@ where
             .compat()
     });
 
-    let metric = name.and(
+    name.and(
         (
             optional(sign),
             value,
@@ -103,9 +103,7 @@ where
 
             Metric::<F>::new(value, mtype, sampling).compat()
         }),
-    );
-
-    metric
+    )
 }
 
 /*
