@@ -240,7 +240,7 @@ impl System {
             .get_matches();
 
         let config = value_t!(app.value_of("config"), String).expect("config file must be string");
-        let mut file = File::open(&config).expect(&format!("opening config file at {}", &config));
+        let mut file = File::open(&config).unwrap_or_else(|_| panic!("opening config file at {}", &config));
         let mut config_str = String::new();
         file.read_to_string(&mut config_str)
             .expect("reading config file");
