@@ -44,7 +44,7 @@ impl Task {
                     match parser.parse_stream_consumed(&mut input) {
                         FastResult::ConsumedOk(((name, metric), rest)) => {
                             INGRESS_METRICS.fetch_add(1, Ordering::Relaxed);
-                            if rest.len() == 0 {
+                            if rest.is_empty() {
                                 break;
                             }
                             input = rest;
@@ -182,13 +182,13 @@ impl Task {
                         // + 2 is for dots
                         let cut_len = options.prefix.len() + name.len() + options.suffix.len() + 2;
                         buf.reserve(cut_len);
-                        if options.prefix.len() > 0 {
+                        if !options.prefix.is_empty() {
                             buf.put_slice(&options.prefix);
                             buf.put_slice(b".");
                         }
 
                         buf.put_slice(&name);
-                        if options.suffix.len() > 0 {
+                        if !options.suffix.is_empty() {
                             buf.put_slice(b".");
                             buf.put_slice(&options.suffix);
                         }
