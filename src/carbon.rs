@@ -23,7 +23,7 @@ pub struct CarbonBackend {
 }
 
 impl CarbonBackend {
-    pub(crate) fn new(addr: SocketAddr, ts: Duration, metrics: Arc<Vec<(Bytes, Float)>>) -> Self {
+    pub(crate) fn new(addr: SocketAddr, ts: Duration, metrics: &Arc<Vec<(Bytes, Float)>>) -> Self {
         let ts: Bytes = ts.as_secs().to_string().into();
 
         let buf = BytesMut::with_capacity(metrics.len() * 200); // 200 is an approximate for full metric name + value
@@ -47,8 +47,7 @@ impl CarbonBackend {
             },
         );
         let metrics = Arc::new(metrics);
-        let self_ = Self { addr, metrics };
-        self_
+        Self { addr, metrics }
     }
 }
 
@@ -60,10 +59,9 @@ impl IntoFuture for CarbonBackend {
     fn into_future(self) -> Self::Future {
         let Self { addr, metrics } = self;
 
-        let conn = TcpStream::connect(&addr).map_err(|e| GeneralError::Io(e));
+        let conn = TcpStream::connect(&addr).map_err(GeneralError::Io);
         let future = conn.and_then(move |conn| {
-            let codec = CarbonCodec::new();
-            let writer = codec.framed(conn);
+            let writer = CarbonCodec.framed(conn);
             //let metric_stream = stream::iter_ok::<_, ()>(metrics.clone());
             let metric_stream = stream::iter_ok::<_, ()>(SharedIter::new(metrics));
             metric_stream
@@ -91,17 +89,11 @@ impl<T: Clone> Iterator for SharedIter<T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.current += 1;
-        self.inner.get(self.current).map(|i| i.clone())
+        self.inner.get(self.current).cloned()
     }
 }
 
 pub struct CarbonCodec;
-
-impl CarbonCodec {
-    pub fn new() -> Self {
-        CarbonCodec //(PhantomData)
-    }
-}
 
 impl Decoder for CarbonCodec {
     type Item = ();
