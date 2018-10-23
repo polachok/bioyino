@@ -40,8 +40,7 @@ where
     let m1 = k - f;
     let d0 = vec[f as usize].clone().into() * m0;
     let d1 = vec[c as usize].clone().into() * m1;
-    let res = d0 + d1;
-    res
+    d0 + d1
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -86,9 +85,9 @@ where
 {
     pub fn new(value: F, mtype: MetricType<F>, sampling: Option<f32>) -> Result<Self, Error> {
         let mut metric = Metric {
-            value: value,
-            mtype: mtype,
-            sampling: sampling,
+            value,
+            mtype,
+            sampling,
             update_counter: 1,
         };
 
@@ -240,11 +239,11 @@ where
     type Item = (&'static str, Float);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let res = match &self.m.mtype {
-            &MetricType::Counter if self.count == 0 => Some(("", self.m.value.into())),
-            &MetricType::DiffCounter(_) if self.count == 0 => Some(("", self.m.value.into())),
-            &MetricType::Gauge(_) if self.count == 0 => Some(("", self.m.value.into())),
-            &MetricType::Timer(ref agg) => {
+        let res = match self.m.mtype {
+            MetricType::Counter if self.count == 0 => Some(("", self.m.value.into())),
+            MetricType::DiffCounter(_) if self.count == 0 => Some(("", self.m.value.into())),
+            MetricType::Gauge(_) if self.count == 0 => Some(("", self.m.value.into())),
+            MetricType::Timer(ref agg) => {
                 match self.count {
                     0 => Some((".count", Float::from(agg.len() as u32))),
                     // agg.len() = 0 is impossible here because of metric creation logic.
@@ -255,16 +254,16 @@ where
                     2 => Some((".min", agg[0].into())),
                     3 => Some((".max", agg[agg.len() - 1].into())),
                     4 => Some((".sum", self.timer_sum.unwrap().into())),
-                    5 => Some((".median", percentile(agg, 0.5).into())),
+                    5 => Some((".median", percentile(agg, 0.5))),
                     6 => {
                         let len: Float = (agg.len() as u32).into();
                         Some((".mean", self.timer_sum.unwrap().into() / len))
                     }
-                    7 => Some((".percentile.75", percentile(agg, 0.75).into())),
-                    8 => Some((".percentile.95", percentile(agg, 0.95).into())),
-                    9 => Some((".percentile.98", percentile(agg, 0.98).into())),
-                    10 => Some((".percentile.99", percentile(agg, 0.99).into())),
-                    11 => Some((".percentile.999", percentile(agg, 0.999).into())),
+                    7 => Some((".percentile.75", percentile(agg, 0.75))),
+                    8 => Some((".percentile.95", percentile(agg, 0.95))),
+                    9 => Some((".percentile.98", percentile(agg, 0.98))),
+                    10 => Some((".percentile.99", percentile(agg, 0.99))),
+                    11 => Some((".percentile.999", percentile(agg, 0.999))),
                     _ => None,
                 }
             }
