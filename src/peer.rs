@@ -114,8 +114,8 @@ where
     type Error = PeerError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let message = match try_ready!(self.inner.poll().map_err(|e| PeerError::Io(e))) {
-            Some(buf) => Some(bincode::deserialize(&buf).map_err(|e| PeerError::Decode(e))?),
+        let message = match try_ready!(self.inner.poll().map_err(PeerError::Io)) {
+            Some(buf) => Some(bincode::deserialize(&buf).map_err(PeerError::Decode)?),
             None => None,
         };
         Ok(Async::Ready(message))
@@ -159,16 +159,16 @@ pub struct PeerServer {
 
 impl PeerServer {
     pub fn new(
-        log: Logger,
+        log: &Logger,
         listen: SocketAddr,
         chans: Vec<Sender<Task>>,
         nodes: Vec<SocketAddr>,
     ) -> Self {
         Self {
-            log: log.new(o!("source"=>"peer-server", "ip"=>format!("{}", listen.clone()))),
+            log: log.new(o!("source"=>"peer-server", "ip"=>format!("{}", listen))),
             listen,
-            nodes: nodes,
-            chans: chans,
+            nodes,
+            chans,
         }
     }
 }
@@ -188,11 +188,11 @@ impl IntoFuture for PeerServer {
         let future = TcpListener::bind(&listen)
             .expect("listening peer port")
             .incoming()
-            .map_err(|e| PeerError::Io(e))
+            .map_err(PeerError::Io)
             .for_each(move |conn| {
                 let peer_addr = conn.peer_addr()
                     .map(|addr| addr.to_string())
-                    .unwrap_or("[UNCONNECTED]".into());
+                    .unwrap_or_else(|_| "[UNCONNECTED]".into());
                 let transport = PeerCodec::new(conn);
 
                 let log = log.new(o!("remote"=>peer_addr));
@@ -242,8 +242,8 @@ impl IntoFuture for PeerServer {
                                     .map(|node| {
                                         let elog = log.clone();
                                         let command = PeerCommandClient::new(
-                                            log.clone(),
-                                            node.clone(),
+                                            &log,
+                                            node,
                                             PeerCommand::LeaderDisable,
                                         ).into_future()
                                             .map_err(move |e| {
@@ -320,7 +320,7 @@ impl IntoFuture for PeerSnapshotClient {
         } = self;
 
         let timer = Interval::new(Instant::now() + interval, interval);
-        let future = timer.map_err(|e| PeerError::Timer(e)).for_each(move |_| {
+        let future = timer.map_err(PeerError::Timer).for_each(move |_| {
             let chans = chans.clone();
             let nodes = nodes.clone();
 
@@ -339,7 +339,7 @@ impl IntoFuture for PeerSnapshotClient {
                     PeerError::TaskSend
                 })
                 .and_then(move |mut metrics| {
-                    metrics.retain(|m| m.len() > 0);
+                    metrics.retain(|m| !m.is_empty());
                     Ok(metrics)
                 });
 
@@ -355,7 +355,7 @@ impl IntoFuture for PeerSnapshotClient {
                         let metrics = metrics.clone();
                         let log = log.clone();
                         TcpStream::connect(&address)
-                            .map_err(|e| PeerError::Io(e))
+                            .map_err(PeerError::Io)
                             .and_then(move |conn| {
                                 let codec = PeerCodec::new(conn);
                                 codec.send(Some(PeerMessage::Snapshot(metrics))).map(|_| ())
@@ -381,10 +381,10 @@ pub struct PeerCommandClient {
 }
 
 impl PeerCommandClient {
-    pub fn new(log: Logger, address: SocketAddr, command: PeerCommand) -> Self {
+    pub fn new(log: &Logger, address: SocketAddr, command: PeerCommand) -> Self {
         Self {
             log: log.new(
-                o!("source"=>"peer-command-client", "server"=>format!("{}", address.clone())),
+                o!("source"=>"peer-command-client", "server"=>format!("{}", address)),
             ),
             address,
             command,
