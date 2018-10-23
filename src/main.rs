@@ -176,7 +176,7 @@ fn main() {
 
     if let Command::Query(command, dest) = command {
         let dest = try_resolve(&dest);
-        let command = PeerCommandClient::new(rlog.clone(), dest.clone(), command);
+        let command = PeerCommandClient::new(&rlog, dest, command);
 
         runtime.block_on(command.into_future()).unwrap_or_else(|e| {
             warn!(rlog,
@@ -188,7 +188,7 @@ fn main() {
         return;
     }
 
-    if count_updates && update_counter_prefix.len() == 0 && update_counter_suffix.len() == 0 {
+    if count_updates && update_counter_prefix.is_empty() && update_counter_suffix.is_empty() {
         warn!(rlog, "update counting suffix and prefix are empty, update counting disabled to avoid metric rewriting");
         count_updates = false;
     }
@@ -203,7 +203,7 @@ fn main() {
         let (tx, rx) = mpsc::channel(task_queue_size);
         chans.push(tx);
         thread::Builder::new()
-            .name(format!("bioyino_cnt{}", i).into())
+            .name(format!("bioyino_cnt{}", i))
             .spawn(move || {
                 let mut runtime = Runtime::new().expect("creating runtime for counting worker");
                 let future = rx.for_each(move |task: Task| lazy(|| ok(task.run())));
@@ -212,13 +212,13 @@ fn main() {
         .expect("starting counting worker thread");
     }
 
-    let stats_prefix = stats_prefix.trim_right_matches(".").to_string();
+    let stats_prefix = stats_prefix.trim_right_matches('.').to_string();
 
     // Spawn future gatering bioyino own stats
     let own_stat_chan = chans[0].clone();
     let own_stat_log = rlog.clone();
     info!(log, "starting own stats counter");
-    let own_stats = OwnStats::new(s_interval, stats_prefix, own_stat_chan, own_stat_log);
+    let own_stats = OwnStats::new(s_interval, stats_prefix, own_stat_chan, &own_stat_log);
     runtime.spawn(own_stats);
 
     info!(log, "starting snapshot sender");
@@ -245,7 +245,7 @@ fn main() {
         retries: ::std::usize::MAX,
     };
     let serv_log = rlog.clone();
-    let peer_server = PeerServer::new(rlog.clone(), peer_listen, chans.clone(), nodes.clone());
+    let peer_server = PeerServer::new(&rlog, peer_listen, chans.clone(), nodes.clone());
     let peer_server = peer_server_ret.spawn(peer_server).map_err(move |e| {
         warn!(serv_log, "shot server gone with error: {:?}", e);
     });
@@ -253,7 +253,7 @@ fn main() {
     runtime.spawn(peer_server);
 
     // TODO (maybe) change to option, not-depending on number of nodes
-    if nodes.len() > 0 {
+    if !nodes.is_empty() {
         info!(log, "consul is enabled, starting consul consensus");
         if consul_disable {
             CAN_LEADER.store(false, Ordering::SeqCst);
@@ -288,11 +288,11 @@ fn main() {
     let dur = Duration::from_millis(carbon.interval);
     let carbon_timer = Interval::new(Instant::now() + dur, dur);
     let carbon_timer = carbon_timer
-        .map_err(|e| GeneralError::Timer(e))
+        .map_err(GeneralError::Timer)
         .for_each(move |_tick| {
             let ts = SystemTime::now()
                 .duration_since(time::UNIX_EPOCH)
-                .map_err(|e| GeneralError::Time(e))?;
+                .map_err(GeneralError::Time)?;
 
             let backend_addr = try_resolve(&carbon.address);
             let tchans = tchans.clone();
@@ -341,7 +341,7 @@ fn main() {
                         .collect()
                             .and_then(|metrics| {
                                 let backend =
-                                    CarbonBackend::new(backend_addr, ts, Arc::new(metrics));
+                                    CarbonBackend::new(backend_addr, ts, &Arc::new(metrics));
 
                                 let retrier = BackoffRetryBuilder {
                                     delay: backend_opts.connect_delay,
@@ -395,7 +395,7 @@ fn main() {
 
             let sck = sck.try_clone().unwrap();
             thread::Builder::new()
-                .name(format!("bioyino_mudp{}", i).into())
+                .name(format!("bioyino_mudp{}", i))
                 .spawn(move || {
                     let fd = sck.as_raw_fd();
                     let messages = mm_packets;
@@ -542,7 +542,7 @@ fn main() {
 
             let chans = chans.clone();
             thread::Builder::new()
-                .name(format!("bioyino_udp{}", i).into())
+                .name(format!("bioyino_udp{}", i))
                 .spawn(move || {
                     // each thread runs it's own runtime
                     let mut runtime = Runtime::new().expect("creating runtime for counting worker");
@@ -550,7 +550,7 @@ fn main() {
                     // Inside each green thread
                     for _ in 0..greens {
                         // start a listener for all sockets
-                        for socket in sockets.iter() {
+                        for socket in &sockets {
                             let buf = BytesMut::with_capacity(task_queue_size * bufsize);
 
                             let mut readbuf = BytesMut::with_capacity(bufsize);
