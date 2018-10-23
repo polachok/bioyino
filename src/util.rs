@@ -26,7 +26,7 @@ pub struct OwnStats {
 }
 
 impl OwnStats {
-    pub fn new(interval: u64, prefix: String, chan: Sender<Task>, log: Logger) -> Self {
+    pub fn new(interval: u64, prefix: String, chan: Sender<Task>, log: &Logger) -> Self {
         let log = log.new(o!("source"=>"stats"));
         let now = Instant::now();
         let dur = Duration::from_millis(interval);
@@ -147,7 +147,7 @@ impl IntoFuture for Aggregator {
             //handle.spawn(chan.send(Task::Rotate(tx)).then(|_| Ok(())));
             chan.send(Task::Rotate(tx))
                 .map_err(|_| ())
-                .and_then(|_| rx.and_then(|m| Ok(m)).map_err(|_| ()))
+                .and_then(|_| rx.and_then(Ok).map_err(|_| ()))
         });
 
         if options.is_leader {
@@ -231,7 +231,7 @@ impl BackoffRetryBuilder {
             let inner = Either::A(action.clone().into_future());
             BackoffRetry {
                 action,
-                inner: inner,
+                inner,
                 options: self,
             }
         }
