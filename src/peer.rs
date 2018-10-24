@@ -437,3 +437,52 @@ impl IntoFuture for PeerCommandClient {
         Box::new(future)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_protocol_compat() {
+        use bytes::BytesMut;
+        use std::io::Cursor;
+        use tokio::codec::length_delimited as codec_length_delimited;
+        use tokio::codec::length_delimited::LengthDelimitedCodec;
+        use tokio::codec::Encoder as TokioCodecEncoder;
+        use tokio::codec::Framed as TokioCodecFramed;
+        use tokio::prelude::Sink;
+        use tokio_io::codec::length_delimited as io_length_delimited;
+        use tokio_io::codec::length_delimited::Framed as TokioIoFramed;
+
+        let test_data = vec![0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf];
+        let conn = Cursor::new(Vec::new());
+        let mut tokio_framed = codec_length_delimited::Builder::new()
+                .length_field_length(8)
+                // TODO: currently max snapshot size is 4Gb
+                // we should make it into an option or make
+                // snapshot sending iterative and splittable
+                .max_frame_length(::std::u32::MAX as usize)
+                .new_framed(conn);
+        tokio_framed.start_send(test_data.clone().into()).unwrap();
+        tokio_framed.poll_complete().unwrap();
+        let inner = tokio_framed.into_inner();
+        let tokio_output = inner.into_inner();
+        println!("{:?}", tokio_output);
+
+        let conn = Cursor::new(Vec::new());
+        let mut tokio_io_framed = io_length_delimited::Builder::new()
+                .length_field_length(8)
+                // TODO: currently max snapshot size is 4Gb
+                // we should make it into an option or make
+                // snapshot sending iterative and splittable
+                .max_frame_length(::std::u32::MAX as usize)
+                .new_framed::<_, Vec<u8>>(conn);
+        tokio_io_framed
+            .start_send(test_data.clone().into())
+            .unwrap();
+        tokio_io_framed.poll_complete().unwrap();
+        let inner = tokio_io_framed.into_inner();
+        let tokio_io_output = inner.into_inner();
+        println!("{:?}", tokio_io_output);
+
+        assert_eq!(tokio_output, tokio_io_output);
+    }
+}

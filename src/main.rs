@@ -23,6 +23,8 @@ extern crate net2;
 extern crate num_cpus;
 extern crate resolve;
 extern crate tokio;
+#[cfg(test)]
+extern crate tokio_io;
 extern crate tokio_core;
 
 // Other

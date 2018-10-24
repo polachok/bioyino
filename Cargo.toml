@@ -28,3 +28,6 @@ slog-async="^2.3"
 slog-scope="^4.0"
 toml="^0.4"
 ftoa = "^0.1"
+
+[dev-dependencies]
+tokio-io="^0.1"
